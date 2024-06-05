@@ -5,6 +5,55 @@
 from http.server import BaseHTTPRequestHandler,HTTPServer
 import os
 
+"Each one of these classes implement a test and action, action to be executed if the test is true"
+class case_no_file(object):
+    '''File or directory does not exist'''
+    def test(self, handler):
+        return not os.path.exists(handler.full_path)
+    
+    def act(self, handler):
+        raise ServerException(f"{handler.path} not found") # what is this handler?
+    
+class case_existing_file(object):
+    '''Case of file existing'''
+    def test(self, handler):
+        return os.path.isfile(handler.full_path)
+    
+    def act(self, handler):
+        handler.handle_file(handler.full_path)
+
+class case_always_fail(object):
+    '''Case of file existing'''
+    def test(self, handler):
+        True
+    
+    def act(self, handler):
+        raise ServerException(f"Unknown object: {handler.full_path}")
+
+class case_directory_index_file(object):
+    '''In case there is an index file in a certain directory, serve that index.html'''
+    def index_path(self, handler):
+        # Function that just joins together to form a potential path to a potential index.html
+        return os.path.join(handler.full_path, 'index.html')
+
+    def test(self, handler):
+        return os.path.isdir(handler.full_path) and os.path.isfile(self.index_path(handler))
+    
+    def act(self, handler):
+        handler.handle_file(self.index_path(handler))
+
+class case_directory_no_index_file(object):
+    '''Directory path, index file does not exist, action is to show listing'''
+    def index_path(self, handler):
+        # Function that just joins together to form a potential path to a potential index.html
+        return os.path.join(handler.full_path, 'index.html')
+
+    def test(self, handler):
+        return os.path.isdir(handler.full_path) and not os.path.isfile(self.index_path(handler))
+    
+    def act(self, handler):
+        '''We want to list directory contents'''
+
 class RequestHandler(BaseHTTPRequestHandler):
     ''' Serving a basic page back to the user '''
 
@@ -31,6 +80,30 @@ class RequestHandler(BaseHTTPRequestHandler):
         </body>
         </html>
         """
+    Listing_Page = """\
+        <html>
+        <body>
+        <ul>
+        {0}
+        </ul>
+        </body>
+        </html>
+        """
+    
+    def show_listing_page(self, full_path):
+        '''Function shows the listing page, called in case a directory is accessed with no index.html file'''
+        try:
+            entries = os.listdir(full_path)
+            bullets = ["<li>{e}</li>" for e in entries if not e.startswith(".")] # list comprehension to fill <li></li> elements
+            page = self.Listing_Page.format('\n'.join(bullets)) # bullets is a list, join at a newline
+            self.send_content(page)
+        except OSError as msg:
+            msg = "{self.path} cannot be found: {msg}"
+            self.handle_error(msg)
+
+    
+    # This acts like an enum
+    Cases = [case_no_file(), case_existing_file(), case_directory_index_file(), case_always_fail()]
     def create_page(self):
         values = {
             # These are either standard Python functions or defined as instance variables for the BaseHTTPRequestHandler class
@@ -60,16 +133,23 @@ class RequestHandler(BaseHTTPRequestHandler):
             full_path = os.getcwd() + self.path
             print(full_path)
 
-            # If we cannot find this file, we will raise a server exception
-            if not os.path.exists(full_path):
-                raise ServerException(f"{self.path} not found")
+            # # If we cannot find this file, we will raise a server exception
+            # if not os.path.exists(full_path):
+            #     raise ServerException(f"{self.path} not found")
             
-            # if a file, we handle it
-            elif os.path.isfile(full_path):
-                self.handle_file(full_path)
+            # # if a file, we handle it
+            # elif os.path.isfile(full_path):
+            #     self.handle_file(full_path)
             
-            else:
-                raise ServerException(f"Unknown object {self.path}")
+            # else:
+            #     raise ServerException(f"Unknown object {self.path}")
+            for case in self.Cases:
+                handler = case()
+                # Why do we have to add a self here?
+                if handler.test(self):
+                    handler.act(self)
+                    break
+
         
         except Exception as msg:
             self.handle_error(msg)
