@@ -8,7 +8,7 @@ import os
 class RequestHandler(BaseHTTPRequestHandler):
     ''' Serving a basic page back to the user '''
 
-    # This is the page we send back
+    # This is the page template we send back
     Page = '''\
 <html>
 <body>
@@ -81,7 +81,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     class case_directory_no_index_file(object):
         '''Directory path, index file does not exist, action is to show listing'''
         def index_path(self, handler):
-            # Function that just joins together to form a potential path to a potential index.html
+            '''Function that just joins together to form a potential path to a potential index.html'''
             return os.path.join(handler.full_path, 'index.html')
 
         def test(self, handler):
@@ -107,6 +107,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     # This acts like an enum
     Cases = [case_no_file(), case_existing_file(), case_directory_index_file(), case_directory_no_index_file(), case_always_fail()]
     def create_page(self):
+        '''Creates a basic page with basic information for debugging'''
         values = {
             # These are either standard Python functions or defined as instance variables for the BaseHTTPRequestHandler class
             'date_time'   : self.date_time_string(),
@@ -119,21 +120,21 @@ class RequestHandler(BaseHTTPRequestHandler):
         return page
 
     def send_content(self, content, status=200):
+        '''Sends content to client'''
         self.send_response(status)
         self.send_header("Content-Type", "text/html")
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
-        # self.wfile.write(bytes(str(content), encoding="utf8")) # must be sent back as bytes
+        # Encoded to ensure bytes-like object
         self.wfile.write(content.encode())
 
     # serve a GET request
     def do_GET(self):
-        # page = self.create_page()
-        # self.send_page(page)
         try:
-            # figure out exactly what is being requested
+            # figure out exactly what is being requested, update the full_path instance variable
             self.full_path = os.getcwd() + self.path
 
+            # This is a new piece of infrastructure, we can loop over objects with test/act functionalities, makes for cleaner code
             for case in self.Cases:
                 handler = case
                 # We add self to add a reference to the RequestHandler object
@@ -156,6 +157,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.handle_error(msg)
     
     def handle_error(self, msg):
+        '''Formats and sends a pre-defined error page with specified error message to client'''
         content = self.Error_Page.format(path=self.path, msg=msg)
         self.send_content(content, 404)
 
